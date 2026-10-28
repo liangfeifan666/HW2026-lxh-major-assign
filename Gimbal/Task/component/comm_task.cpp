@@ -1,45 +1,85 @@
 /**
  *******************************************************************************
- * @file      :comm_task.cpp
- * @brief     :
- * @history   :
- *  Version     Date            Author          Note
- *  V0.9.0      yyyy-mm-dd      <author>        1. <note>
- *******************************************************************************
- * @attention :
- *******************************************************************************
- *  Copyright (c) 2024 Hello World Team, Zhejiang University.
- *  All Rights Reserved.
+ * @file      : comm_task.cpp
+ * @brief     : 云台 CAN/UART 通信；DM 编码异常时发送零转矩兜底帧
  *******************************************************************************
  */
-/* Includes ------------------------------------------------------------------*/
 #include "comm_task.hpp"
 
-/* Exported function definitions ---------------------------------------------*/
+#include "HW_can.hpp"
+#include "can.h"
+#include "gimbal_chassis_comm.hpp"
+#include "iwdg.h"
+#include "ins_chassis_gimbal_comm.hpp"
+#include "ins_comm.hpp"
+#include "ins_motor.hpp"
+#include "motor_DaMiao.hpp"
+#include "usart.h"
+
+extern volatile bool g_cycle_completed;
+
+namespace {
+uint8_t g_rc_rx_data[18];
+bool g_comm_initialized = false;
+
+void ArmRemoteRx() {
+  (void)HAL_UARTEx_ReceiveToIdle_DMA(&huart3, g_rc_rx_data, 18);
+  __HAL_DMA_DISABLE_IT(huart3.hdmarx, DMA_IT_HT);
+}
+
+void SendMotor(hello_world::motor::Motor *motor) {
+  uint8_t data[8] = {};
+  auto *dm = static_cast<hello_world::motor::DaMiao *>(motor);
+  if (motor->encode(data)) {
+    CAN_Send_Msg(&hcan1, data, dm->tx_id(), 8);
+  } else {
+    // MIT：pos=0、vel=0、kp=0、kd=0、torque=0。
+    const uint8_t zero_torque[8] = {0x7F, 0xFF, 0x7F, 0xF0,
+                                    0x00, 0x00, 0x07, 0xFF};
+    CAN_Send_Msg(&hcan1, const_cast<uint8_t *>(zero_torque), motor->id(), 8);
+  }
+}
+}
+
 void CommTaskInit(void) {
-  /* TODO【新人任务】:
-   * 通讯层一次性初始化：
-   *   1. 初始化 CAN 滤波器：inc/HW_can.hpp 的 CanFilter_Init(&hcan1) / CanFilter_Init(&hcan2)。
-   *   2. 启动遥控器串口空闲 + DMA 接收（18 字节 DBUS，见 inc/DT7.hpp 注释）：
-   *      调用 HAL_UARTEx_ReceiveToIdle_DMA 并记录接收缓冲区。
-   *   3. 启动 / 刷新独立看门狗 IWDG（inc/iwdg.h）。
-   */
+  CanFilter_Init(&hcan1);
+  CanFilter_Init(&hcan2);
+  (void)HAL_CAN_Start(&hcan1);
+  (void)HAL_CAN_Start(&hcan2);
+  (void)HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
+  (void)HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO1_MSG_PENDING);
+  ArmRemoteRx();
+  HAL_IWDG_Refresh(&hiwdg);
+  g_comm_initialized = true;
 }
 
 void CommTask(void) {
-  /* TODO【新人任务】:
-   * 每个通讯周期（1ms）调用一次，把各模块 encode 出的 8 字节 CAN 帧发出去：
-   *   1. 遍历电机：调用 encode(data) 得到 8 字节 + tx_id()，再 CAN_Send_Msg 发出。
-   *   2. 双板通讯对象 encode 后同样发送。
-   *   3. 刷新 IWDG。
-   */
+  if (!g_comm_initialized) return;
+  SendMotor(GetMotorYaw());
+  SendMotor(GetMotorPitch());
+
+  uint8_t comm_data[8];
+  auto *comm = GetGimbalChassisComm();
+  comm->encode(comm_data);
+  CAN_Send_Msg(&hcan2, comm_data, comm->tx_id(), 8);
+
+  if (g_cycle_completed) {
+    HAL_IWDG_Refresh(&hiwdg);
+    g_cycle_completed = false;
+  }
 }
 
-/* Private function definitions ----------------------------------------------*/
-/* TODO【新人任务】:
- * 实现 UART 空闲中断回调 HAL_UARTEx_RxEventCallback：
- *   - 收到满 18 字节后调用 DT7.decode() 解包遥控器数据，并重新启动下一轮接收；
- *   - 该回调同样是 C 链接（extern "C"）。
- * 注意：CAN 的接收分发在 src/HW_can.cpp 的两个回调里（电机 decode / 双板协议解码），
- *      不要在这里重复写 CAN 接收逻辑。
- */
+extern "C" void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart,
+                                           uint16_t Size) {
+  if (huart != &huart3) return;
+  // 短帧后重新从帧头接收，避免把两帧各一段拼成伪有效遥控数据。
+  (void)HAL_UART_DMAStop(huart);
+  if (Size == 18) DecodeRemoteControlFrame(g_rc_rx_data);
+  ArmRemoteRx();
+}
+
+extern "C" void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+  if (huart != &huart3) return;
+  (void)HAL_UART_DMAStop(huart);
+  ArmRemoteRx();
+}

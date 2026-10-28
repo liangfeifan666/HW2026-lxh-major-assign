@@ -18,6 +18,10 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "DT7.hpp"
+
+namespace hello_world {
+class OfflineChecker;
+}
 /* Exported macro ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
 /* Exported types ------------------------------------------------------------*/
@@ -26,5 +30,7 @@
 /* Exported function prototypes ----------------------------------------------*/
 /* 获取遥控器解码对象（DT7）单例。 */
 hello_world::remote_control::DT7 *GetRemoteControl();
+hello_world::OfflineChecker *GetRemoteControlOfflineChecker();
+void DecodeRemoteControlFrame(const uint8_t data[18]);
 
 #endif /* CHASSIS_INSTANCE_INS_COMM_HPP_ */

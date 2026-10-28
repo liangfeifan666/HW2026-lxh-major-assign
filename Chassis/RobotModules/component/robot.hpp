@@ -1,45 +1,60 @@
 /**
  *******************************************************************************
- * @file      :robot.hpp
- * @brief     :
- * @history   :
- *  Version     Date            Author          Note
- *  V0.9.0      yyyy-mm-dd      <author>        1. <note>
- *******************************************************************************
- * @attention :
- *******************************************************************************
- *  Copyright (c) 2024 Hello World Team, Zhejiang University.
- *  All Rights Reserved.
+ * @file      : robot.hpp
+ * @brief     : 底盘三态状态机与统一安全输出出口
  *******************************************************************************
  */
-/* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef CHASSIS_ROBOT_MODULES_ROBOT_HPP_
 #define CHASSIS_ROBOT_MODULES_ROBOT_HPP_
 
-/* Includes ------------------------------------------------------------------*/
-/* Exported macro ------------------------------------------------------------*/
-/* Exported constants --------------------------------------------------------*/
-/* Exported types ------------------------------------------------------------*/
-/* Exported variables --------------------------------------------------------*/
-/* Exported function prototypes ----------------------------------------------*/
+#include <array>
+#include <cstdint>
 
-/* ============================================================================
- * 【新人任务】声明底盘板顶层状态机类 Robot（namespace robot）。
- *
- * 你要做：
- *   1. 设计 Robot 类，作为本板每个控制周期（1ms）的入口：汇总各模块数据，
- *      生成控制指令并下发给执行部件。
- *   2. 实现「生命状态」三态切换：Dead（上电未就绪 / 离线）→ Resurrection（恢复
- *      自检）→ Working（正常控制），并定义各状态进入 / 退出时的复位动作。
- *   3. 在 Working 态下按手动控制源与工作模式（分离 / 随动 / 小陀螺）生成底盘运动指令。
- *   4. 提供注册各模块指针的接口（Chassis、Imu、4 轮电机、GimbalChassisComm），并在每个周期按正确顺序更新数据。
- *
- * 约束 / 提示：
- *   - 底盘板与云台板之间只能通过 GimbalChassisComm 的
- *     CAN 帧交换信息，不能直接互相调用函数或共享变量。
- *   - 控制周期入口由 Task/component/main_task.cpp 的定时中断调用，本类自己不要开中断、
- *     不要死等延时。
- *   - 急停：遥控器拨到急停位时，必须保证所有电机指令归零（硬性验收项）。
- *   - 状态机的基类 / 迁移机制要自己设计，本骨架不提供（裁判系统 / 超电 / 蜂鸣器等组件本骨架也没有，可忽略）。
- * ==========================================================================*/
+#include "chassis.hpp"
+#include "gimbal_chassis_comm.hpp"
+#include "imu.hpp"
+#include "motor.hpp"
+#include "offline_checker.hpp"
+#include "pid.hpp"
+
+namespace robot {
+
+class Robot {
+ public:
+  void registerChassis(Chassis *chassis) { chassis_ = chassis; }
+  void registerImu(hello_world::imu::Imu *imu) { imu_ = imu; }
+  void registerComm(GimbalChassisComm *comm) { comm_ = comm; }
+  void registerFollowPid(hello_world::pid::Pid *pid) { follow_pid_ = pid; }
+  void registerWheel(int idx, hello_world::motor::Motor *motor,
+                     hello_world::pid::Pid *pid,
+                     hello_world::OfflineChecker *checker);
+
+  void update();
+  bool outputAllowed() const;
+  LifeState life_state() const { return life_state_; }
+
+ private:
+  static constexpr std::size_t kWheelCount = 4;
+  static constexpr uint16_t kResurrectionTicks = 300;
+
+  bool hardwareReady() const;
+  void updateState();
+  void runWorking();
+  void stopAll();
+  void updateComm(bool output_enabled, float actual_w);
+
+  Chassis *chassis_ = nullptr;
+  hello_world::imu::Imu *imu_ = nullptr;
+  GimbalChassisComm *comm_ = nullptr;
+  hello_world::pid::Pid *follow_pid_ = nullptr;
+  std::array<hello_world::motor::Motor *, kWheelCount> motors_{};
+  std::array<hello_world::pid::Pid *, kWheelCount> pids_{};
+  std::array<hello_world::OfflineChecker *, kWheelCount> checkers_{};
+  LifeState life_state_ = LifeState::Dead;
+  GimbalChassisComm::GimbalData gimbal_data_{};
+  uint16_t resurrection_ticks_ = 0;
+};
+
+}  // namespace robot
+
 #endif /* CHASSIS_ROBOT_MODULES_ROBOT_HPP_ */

@@ -18,6 +18,10 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "motor.hpp"
+
+namespace hello_world {
+class OfflineChecker;
+}
 /* Exported macro ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
 /* Exported types ------------------------------------------------------------*/
@@ -28,5 +32,9 @@
 hello_world::motor::Motor *GetMotorYaw();
 /* 获取云台 pitch 关节电机单例（DM-J4310）。 */
 hello_world::motor::Motor *GetMotorPitch();
+
+hello_world::OfflineChecker *GetMotorYawOfflineChecker();
+hello_world::OfflineChecker *GetMotorPitchOfflineChecker();
+bool DecodeGimbalMotorFeedback(uint32_t std_id, const uint8_t data[8]);
 
 #endif /* GIMBAL_INSTANCE_INS_MOTOR_HPP_ */

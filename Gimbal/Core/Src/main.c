@@ -29,10 +29,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-/* TODO【新人任务】:
- * 在此 include 任务层头文件，例如 #include "main_task.hpp"，
- * 它声明了 extern "C" 的 MainTaskInit(void) / MainTask(void)。
- */
+#include "main_task.hpp"
 
 /* USER CODE END Includes */
 
@@ -117,10 +114,7 @@ int main(void)
   MX_IWDG_Init();
   HAL_TIM_Base_Start_IT(&htim2);
   HAL_TIM_Base_Start_IT(&htim6);
-  /* TODO【新人任务】:
-   * 在进入 while(1) 之前调用 MainTaskInit()，完成电机 / IMU / 通讯 / IWDG 的
-   * 一次性初始化。此后的控制与通讯周期由 htim6 中断驱动（见 Task/main_task.cpp）。
-   */
+  MainTaskInit();
 
   /* USER CODE END 2 */
 

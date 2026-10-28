@@ -30,5 +30,7 @@ class Pid;
 /* Exported function prototypes ----------------------------------------------*/
 /* 获取第 idx 号轮电机速度环 PID 单例（idx ∈ [0,4)）。 */
 hello_world::pid::Pid *GetPidMotorWheel(int idx);
+/* 获取跟随模式的相对角度环 PID 单例。 */
+hello_world::pid::Pid *GetPidChassisFollow();
 
 #endif /* CHASSIS_INSTANCE_INS_PID_HPP_ */

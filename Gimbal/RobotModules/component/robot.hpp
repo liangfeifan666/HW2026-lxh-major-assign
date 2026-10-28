@@ -1,46 +1,74 @@
 /**
  *******************************************************************************
- * @file      :robot.hpp
- * @brief     :
- * @history   :
- *  Version     Date            Author          Note
- *  V0.9.0      yyyy-mm-dd      <author>        1. <note>
- *******************************************************************************
- * @attention :
- *******************************************************************************
- *  Copyright (c) 2024 Hello World Team, Zhejiang University.
- *  All Rights Reserved.
+ * @file      : robot.hpp
+ * @brief     : 云台三态状态机、遥控解锁与整车指令入口
  *******************************************************************************
  */
-/* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef GIMBAL_ROBOT_MODULES_ROBOT_HPP_
 #define GIMBAL_ROBOT_MODULES_ROBOT_HPP_
 
-/* Includes ------------------------------------------------------------------*/
-/* Exported macro ------------------------------------------------------------*/
-/* Exported constants --------------------------------------------------------*/
-/* Exported types ------------------------------------------------------------*/
-/* Exported variables --------------------------------------------------------*/
-/* Exported function prototypes ----------------------------------------------*/
+#include <cstdint>
 
-/* ============================================================================
- * 【新人任务】声明云台板顶层状态机类 Robot（namespace robot）。
- *
- * 你要做：
- *   1. 设计 Robot 类，作为本板每个控制周期的入口：汇总云台目标角度（来自遥控器 /
- *      键鼠 / 底盘经双板通讯传来的期望值）、IMU 姿态、电机反馈，生成 yaw / pitch
- *      控制指令。
- *   2. 实现「生命状态」三态切换：Dead → Resurrection → Working，并定义各状态
- *      进入 / 退出时的复位动作。
- *   3. 提供注册各模块指针的接口（Gimbal、Imu、yaw / pitch 电机、GimbalChassisComm），
- *      并在每个周期按正确顺序更新数据。
- *
- * 约束 / 提示：
- *   - 与底盘板之间只能通过 GimbalChassisComm 的
- *     CAN 帧交换信息，不能直接互相调用函数或共享变量。
- *   - 控制周期入口由 Task/component/main_task.cpp 的定时中断调用，本类自己不要开中断、
- *     不要死等延时。
- *   - 急停：遥控器拨到急停位时，必须保证所有电机指令归零（硬性验收项）。
- *   - 状态机的基类 / 迁移机制要自己设计，本骨架不提供（裁判系统 / 超电 / 蜂鸣器等组件本骨架也没有，可忽略）。
- * ==========================================================================*/
+#include "DT7.hpp"
+#include "gimbal.hpp"
+#include "gimbal_chassis_comm.hpp"
+#include "imu.hpp"
+#include "offline_checker.hpp"
+
+namespace robot {
+
+class Robot {
+ public:
+  void registerGimbal(Gimbal *gimbal) { gimbal_ = gimbal; }
+  void registerImu(hello_world::imu::Imu *imu) { imu_ = imu; }
+  void registerComm(GimbalChassisComm *comm) { comm_ = comm; }
+  void registerRemote(hello_world::remote_control::DT7 *remote,
+                      hello_world::OfflineChecker *checker);
+  void registerMotors(hello_world::motor::Motor *yaw,
+                      hello_world::motor::Motor *pitch,
+                      hello_world::OfflineChecker *yaw_checker,
+                      hello_world::OfflineChecker *pitch_checker);
+
+  void update();
+  bool outputAllowed() const;
+  LifeState life_state() const { return life_state_; }
+
+ private:
+  static constexpr uint16_t kResurrectionTicks = 300;
+
+  bool hardwareReady() const;
+  bool validModeSwitch() const;
+  bool sticksCentered() const;
+  ChassisMode chassisMode() const;
+  void updateState();
+  void runWorking();
+  void stopAll();
+  void updateComm(bool remote_working, const ChassisMotion &command);
+
+  Gimbal *gimbal_ = nullptr;
+  hello_world::imu::Imu *imu_ = nullptr;
+  GimbalChassisComm *comm_ = nullptr;
+  hello_world::remote_control::DT7 *remote_ = nullptr;
+  hello_world::OfflineChecker *remote_checker_ = nullptr;
+  hello_world::motor::Motor *yaw_motor_ = nullptr;
+  hello_world::motor::Motor *pitch_motor_ = nullptr;
+  hello_world::OfflineChecker *yaw_checker_ = nullptr;
+  hello_world::OfflineChecker *pitch_checker_ = nullptr;
+  LifeState life_state_ = LifeState::Dead;
+  ChassisMode chassis_mode_ = ChassisMode::Separate;
+  hello_world::remote_control::SwitchState left_switch_ =
+      hello_world::remote_control::kSwitchStateDown;
+  hello_world::remote_control::SwitchState right_switch_ =
+      hello_world::remote_control::kSwitchStateDown;
+  float rc_lv_ = 0.0f;
+  float rc_lh_ = 0.0f;
+  float rc_rv_ = 0.0f;
+  float rc_rh_ = 0.0f;
+  float rc_wheel_ = 0.0f;
+  uint16_t resurrection_ticks_ = 0;
+  bool unlock_armed_ = false;
+};
+
+}  // namespace robot
+
 #endif /* GIMBAL_ROBOT_MODULES_ROBOT_HPP_ */

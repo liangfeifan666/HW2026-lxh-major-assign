@@ -137,6 +137,8 @@ message(STATUS "Project name: ${PROJECT_NAME}")
 
 # Add the project includes to the executable
 target_include_directories(${PROJECT_NAME} PUBLIC ${project_incs})
+# tick.cpp 的 STM32 实现由该宏启用，离线检测与 BMI088 依赖它。
+target_compile_definitions(${PROJECT_NAME} PRIVATE USE_HAL_TICK)
 
 # Link the drivers library and the third party libraries to the executable
 target_link_libraries(${PROJECT_NAME} PUBLIC drivers)

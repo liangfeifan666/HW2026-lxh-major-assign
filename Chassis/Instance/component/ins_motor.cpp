@@ -1,42 +1,44 @@
 /**
  *******************************************************************************
- * @file      :ins_motor.cpp
- * @brief     :
- * @history   :
- *  Version     Date            Author          Note
- *  V0.9.0      yyyy-mm-dd      <author>        1. <note>
- *******************************************************************************
- * @attention :
- *******************************************************************************
- *  Copyright (c) 2024 Hello World Team, Zhejiang University.
- *  All Rights Reserved.
+ * @file      : ins_motor.cpp
+ * @brief     : 四轮 M3508 与独立反馈离线检测
  *******************************************************************************
  */
-/* Includes ------------------------------------------------------------------*/
 #include "ins_motor.hpp"
-/* Private macro -------------------------------------------------------------*/
-/* Private constants ---------------------------------------------------------*/
-/* Private types -------------------------------------------------------------*/
-/* Private variables ---------------------------------------------------------*/
-/* External variables --------------------------------------------------------*/
-/* Private function prototypes -----------------------------------------------*/
-/* Exported function definitions ---------------------------------------------*/
-hello_world::motor::Motor *GetMotorWheel(int idx) {
-  /* TODO【新人任务】:
-   * 返回第 idx 号轮电机（M3508）单例。
-   *
-   * 你要做：
-   *   1. 静态定义 4 个轮电机对象并存入数组（可用 hello_world::motor::CreateMotor
-   *      (hello_world::motor::MotorType::kM3508, id, opt) 工厂，或直接构造 M3508）。
-   *   2. 校验 idx ∈ [0,4)，返回对应元素的地址。
-   *   3. 每个电机的 CAN id、方向、减速比按实机接线配置（见考核说明文档）。
-   *
-   * 约束 / 提示：
-   *   - 电机设备类已提供：inc/motor_M3508.hpp（M3508）、inc/motor.hpp（CreateMotor 工厂、
-   *     OptionalParams 配置项）。
-   */
-  (void)idx;
-  return nullptr;
+
+#include "motor_M3508.hpp"
+#include "offline_checker.hpp"
+
+namespace {
+constexpr uint8_t kWheelIds[4] = {1, 2, 3, 4};  // LF、LB、RB、RF
 }
 
-/* Private function definitions ----------------------------------------------*/
+hello_world::motor::Motor *GetMotorWheel(int idx) {
+  using namespace hello_world::motor;
+  static const OptionalParams opt = [] {
+    OptionalParams value;
+    value.input_type = InputType::kRaw;
+    value.dir = kDirRev;  // 任务书 6.2：四个轮电机均反向
+    value.max_raw_input_lim = 6000.0f;
+    return value;
+  }();
+  static M3508 motors[] = {
+      M3508(kWheelIds[0], opt), M3508(kWheelIds[1], opt),
+      M3508(kWheelIds[2], opt), M3508(kWheelIds[3], opt)};
+  return (idx >= 0 && idx < 4) ? &motors[idx] : nullptr;
+}
+
+hello_world::OfflineChecker *GetMotorWheelOfflineChecker(int idx) {
+  static hello_world::OfflineChecker checkers[4];
+  return (idx >= 0 && idx < 4) ? &checkers[idx] : nullptr;
+}
+
+bool DecodeMotorWheelFeedback(uint32_t std_id, const uint8_t data[8]) {
+  for (int i = 0; i < 4; ++i) {
+    if (std_id != hello_world::motor::M3508::GetRxId(kWheelIds[i])) continue;
+    if (!GetMotorWheel(i)->decode(data)) return true;
+    GetMotorWheelOfflineChecker(i)->update();
+    return true;
+  }
+  return false;
+}

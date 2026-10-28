@@ -1,39 +1,45 @@
 /**
  *******************************************************************************
- * @file      :gimbal.hpp
- * @brief     :
- * @history   :
- *  Version     Date            Author          Note
- *  V0.9.0      yyyy-mm-dd      <author>        1. <note>
- *******************************************************************************
- * @attention :
- *******************************************************************************
- *  Copyright (c) 2024 Hello World Team, Zhejiang University.
- *  All Rights Reserved.
+ * @file      : gimbal.hpp
+ * @brief     : DM-J4310 yaw/pitch 关节空间位置控制
  *******************************************************************************
  */
-/* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef GIMBAL_ROBOT_MODULES_GIMBAL_HPP_
 #define GIMBAL_ROBOT_MODULES_GIMBAL_HPP_
 
-/* Includes ------------------------------------------------------------------*/
-/* Exported macro ------------------------------------------------------------*/
-/* Exported constants --------------------------------------------------------*/
-/* Exported types ------------------------------------------------------------*/
-/* Exported variables --------------------------------------------------------*/
-/* Exported function prototypes ----------------------------------------------*/
+#include "module_state.hpp"
+#include "motor.hpp"
+#include "pid.hpp"
 
-/* ============================================================================
- * 【新人任务】声明云台运动模块类 Gimbal（namespace robot）。
- *
- * 你要做：
- *   1. 设计 Gimbal 类，实现 yaw / pitch 两个关节的关节空间位置控制（位置环）。
- *   2. 读入云台目标角度（来自遥控器 / 键鼠 / 底盘经双板通讯传来的期望值），输出
- *      yaw / pitch 电机的控制量。
- *   3. 处理 yaw 轴 360° 连续旋转的角度回绕，pitch 轴用软件限位防堵转。
- *
- * 约束 / 提示：
- *   - yaw / pitch 均为达妙 DM-J4310 电机，反馈角度 / 指令接口见 inc/motor_DaMiao.hpp。
- *   - 位置环 PID 由你自己实现（PID 类），本模块只负责调用。
- * ==========================================================================*/
+namespace robot {
+
+class Gimbal {
+ public:
+  // 初次上机采用保守限位；机械实测后只允许在这里统一调整。
+  static constexpr float kPitchMin = -0.30f;
+  static constexpr float kPitchMax = 0.30f;
+
+  void registerYaw(hello_world::motor::Motor *motor,
+                   hello_world::pid::Pid *pid);
+  void registerPitch(hello_world::motor::Motor *motor,
+                     hello_world::pid::Pid *pid);
+
+  void resetTarget();
+  void setTarget(const GimbalMotion &target);
+  void update();
+  void stop();
+
+  const GimbalMotion &target() const { return target_; }
+  GimbalMotion feedback() const;
+
+ private:
+  hello_world::motor::Motor *yaw_motor_ = nullptr;
+  hello_world::motor::Motor *pitch_motor_ = nullptr;
+  hello_world::pid::Pid *yaw_pid_ = nullptr;
+  hello_world::pid::Pid *pitch_pid_ = nullptr;
+  GimbalMotion target_{};
+};
+
+}  // namespace robot
+
 #endif /* GIMBAL_ROBOT_MODULES_GIMBAL_HPP_ */

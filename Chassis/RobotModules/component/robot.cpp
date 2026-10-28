@@ -1,37 +1,143 @@
 /**
  *******************************************************************************
- * @file      :robot.cpp
- * @brief     :
- * @history   :
- *  Version     Date            Author          Note
- *  V0.9.0      yyyy-mm-dd      <author>        1. <note>
- *******************************************************************************
- * @attention :
- *******************************************************************************
- *  Copyright (c) 2024 Hello World Team, Zhejiang University.
- *  All Rights Reserved.
+ * @file      : robot.cpp
+ * @brief     : 底盘仅在云台板确认遥控有效后运行；任何失效持续发零
  *******************************************************************************
  */
-/* Includes ------------------------------------------------------------------*/
-/* Private macro -------------------------------------------------------------*/
-/* Private constants ---------------------------------------------------------*/
-/* Private types -------------------------------------------------------------*/
-/* Private variables ---------------------------------------------------------*/
-/* External variables --------------------------------------------------------*/
-/* Private function prototypes -----------------------------------------------*/
-/* Exported function definitions ---------------------------------------------*/
-/* Private function definitions ----------------------------------------------*/
+#include "robot.hpp"
 
-/* ============================================================================
- * 【新人任务】实现 robot.hpp 中声明的状态机。
- *
- * 你要做：
- *   1. 周期入口：按「更新数据 → 状态机迁移 → 生成指令 → 下发」的顺序组织 update()。
- *   2. 三态实现：Dead 时输出全零并等待就绪条件；Resurrection 时做自检与复位（如等待
- *      电机使能、IMU 零漂收敛）；Working 时执行正常控制逻辑。
- *   3. 各工作模式（分离 / 随动 / 小陀螺）的指令生成分支。
- *
- * 约束 / 提示：
- *   - 状态切换时记得复位上一状态残留的指令，避免电机突变。
- *   - 所有下发指令统一经过本类，急停判断放在最外层，确保任何分支都先过急停。
- * ==========================================================================*/
+#include <cmath>
+
+namespace robot {
+
+void Robot::registerWheel(int idx, hello_world::motor::Motor *motor,
+                          hello_world::pid::Pid *pid,
+                          hello_world::OfflineChecker *checker) {
+  if (idx < 0 || idx >= static_cast<int>(kWheelCount)) return;
+  motors_[idx] = motor;
+  pids_[idx] = pid;
+  checkers_[idx] = checker;
+}
+
+bool Robot::hardwareReady() const {
+  if (!chassis_ || !imu_ || !comm_ || !follow_pid_ || !imu_->isReady()) {
+    return false;
+  }
+  for (std::size_t i = 0; i < kWheelCount; ++i) {
+    if (!motors_[i] || !pids_[i] || !checkers_[i] ||
+        checkers_[i]->isOffline()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool Robot::outputAllowed() const {
+  if (life_state_ != LifeState::Working || !hardwareReady() ||
+      comm_->isOffline()) {
+    return false;
+  }
+  const auto &gimbal = gimbal_data_;
+  return gimbal.life == LifeState::Working && gimbal.remote_working;
+}
+
+void Robot::updateState() {
+  const bool peer_ready = comm_ && !comm_->isOffline() &&
+                          gimbal_data_.life == LifeState::Working &&
+                          gimbal_data_.remote_working;
+  if (!hardwareReady() || !peer_ready) {
+    life_state_ = LifeState::Dead;
+    resurrection_ticks_ = 0;
+    return;
+  }
+
+  if (life_state_ == LifeState::Dead) {
+    life_state_ = LifeState::Resurrection;
+    resurrection_ticks_ = 0;
+  } else if (life_state_ == LifeState::Resurrection) {
+    if (++resurrection_ticks_ >= kResurrectionTicks) {
+      life_state_ = LifeState::Working;
+    }
+  }
+}
+
+void Robot::update() {
+  if (comm_) {
+    // CAN Rx 优先级更高，短临界区保证安全位、指令和角度来自同一帧。
+    const uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    gimbal_data_ = comm_->gimbal_data();
+    __set_PRIMASK(primask);
+  }
+  if (imu_) imu_->update();
+  updateState();
+
+  if (!outputAllowed()) {
+    stopAll();
+    updateComm(false, 0.0f);
+    return;
+  }
+  runWorking();
+}
+
+void Robot::runWorking() {
+  const auto &gimbal = gimbal_data_;
+  ChassisMotion command = gimbal.chassis_command;
+  if (!std::isfinite(command.vx) || !std::isfinite(command.vy) ||
+      !std::isfinite(command.w) || !std::isfinite(gimbal.yaw)) {
+    life_state_ = LifeState::Dead;
+    stopAll();
+    updateComm(false, 0.0f);
+    return;
+  }
+
+  command.vx = Clamp(command.vx, -1.2f, 1.2f);
+  command.vy = Clamp(command.vy, -1.2f, 1.2f);
+  const float delta = WrapPi(gimbal.yaw);
+  if (gimbal.chassis_mode == ChassisMode::Follow) {
+    command.w = follow_pid_->calculate(delta, 0.0f);
+  } else {
+    follow_pid_->reset();
+    command.w = Clamp(command.w, -5.0f, 5.0f);
+  }
+  command.w = Clamp(command.w, -5.0f, 5.0f);
+
+  // 零输入必须真的是零电流，不能让速度环对残余轮速继续制动。
+  if (std::fabs(command.vx) < 1e-6f &&
+      std::fabs(command.vy) < 1e-6f &&
+      std::fabs(command.w) < 1e-6f) {
+    stopAll();
+    updateComm(false, 0.0f);
+    return;
+  }
+
+  chassis_->update(command, delta);
+  for (std::size_t i = 0; i < kWheelCount; ++i) {
+    const float output = pids_[i]->calculate(chassis_->wheel_speeds()[i],
+                                             motors_[i]->vel());
+    motors_[i]->setInput(output);
+  }
+  updateComm(true, command.w);
+}
+
+void Robot::stopAll() {
+  if (chassis_) chassis_->stop();
+  if (follow_pid_) follow_pid_->reset();
+  for (std::size_t i = 0; i < kWheelCount; ++i) {
+    if (motors_[i]) motors_[i]->setInput(0.0f);
+    if (pids_[i]) pids_[i]->reset();
+  }
+}
+
+void Robot::updateComm(bool output_enabled, float actual_w) {
+  if (!comm_) return;
+  auto &tx = comm_->chassis_data();
+  tx.life = life_state_;
+  tx.mode = comm_->isOffline() ? ChassisMode::Separate
+                               : gimbal_data_.chassis_mode;
+  tx.output_enabled = output_enabled;
+  tx.yaw = imu_ ? imu_->yaw() : 0.0f;
+  tx.w = actual_w;
+}
+
+}  // namespace robot

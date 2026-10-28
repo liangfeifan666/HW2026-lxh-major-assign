@@ -97,13 +97,9 @@ class OfflineChecker : public MemMgr
       return true;
     }
 
-    uint32_t last_update_tick_copy = last_update_tick_;
-    int64_t diff = tick::GetTickMs() - last_update_tick_copy;
-    if (diff < 0) {
-      /* 考虑定时器溢出情况 */
-      diff += std::numeric_limits<uint32_t>::max();
-    }
-
+    // 无符号减法天然兼容 HAL ms tick 回绕。
+    const uint32_t last_update_tick_copy = last_update_tick_;
+    const uint32_t diff = tick::GetTickMs() - last_update_tick_copy;
     if (diff > offline_tick_thres_) {
       is_offline_ = true;
     }

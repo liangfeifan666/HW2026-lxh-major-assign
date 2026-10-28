@@ -10,6 +10,7 @@
 #ifndef MODULE_STATE_HPP_
 #define MODULE_STATE_HPP_
 
+#include <cmath>
 #include <cstdint>
 
 namespace robot {
@@ -82,9 +83,8 @@ struct GimbalMotion {
 constexpr float kPi = 3.14159265358979323846f;
 
 inline float WrapPi(float angle) {
-  while (angle > kPi) angle -= 2.0f * kPi;
-  while (angle < -kPi) angle += 2.0f * kPi;
-  return angle;
+  // remainder 有界执行；异常浮点直接归零，避免中断里死循环。
+  return std::isfinite(angle) ? std::remainder(angle, 2.0f * kPi) : 0.0f;
 }
 
 inline float Clamp(float value, float lower, float upper) {

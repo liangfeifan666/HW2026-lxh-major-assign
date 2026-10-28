@@ -15,11 +15,13 @@ namespace {
 constexpr uint8_t kProtocolVersion = 0xA0;
 
 int16_t EncodeI16(float value, float scale, float limit) {
+  if (!std::isfinite(value)) return 0;
   value = robot::Clamp(value, -limit, limit);
   return static_cast<int16_t>(value * scale);
 }
 
 int8_t EncodeI8(float value, float scale, float limit) {
+  if (!std::isfinite(value)) return 0;
   value = robot::Clamp(value, -limit, limit);
   return static_cast<int8_t>(value * scale);
 }
@@ -65,7 +67,7 @@ void GimbalChassisComm::encode(uint8_t tx_data[8]) {
     const auto mode = data.mode <= ChassisMode::Spin ? data.mode : ChassisMode::Separate;
     tx_data[0] = static_cast<uint8_t>(life) | (data.output_enabled ? 0x80 : 0);
     tx_data[1] = kProtocolVersion | static_cast<uint8_t>(mode);
-    tx_data[3] = static_cast<uint8_t>(EncodeI8(data.w, 40.0f, 5.0f));
+    tx_data[3] = static_cast<uint8_t>(EncodeI8(data.w, 20.0f, 5.0f));
     PutI16(tx_data, 4, EncodeI16(WrapPi(data.yaw), 10000.0f, 3.14f));
   } else {
     const auto &data = gimbal_data_;
@@ -76,7 +78,7 @@ void GimbalChassisComm::encode(uint8_t tx_data[8]) {
     tx_data[1] = kProtocolVersion | static_cast<uint8_t>(mode);
     tx_data[2] = static_cast<uint8_t>(EncodeI8(data.chassis_command.vx, 100.0f, 1.2f));
     tx_data[3] = static_cast<uint8_t>(EncodeI8(data.chassis_command.vy, 100.0f, 1.2f));
-    tx_data[4] = static_cast<uint8_t>(EncodeI8(data.chassis_command.w, 40.0f, 5.0f));
+    tx_data[4] = static_cast<uint8_t>(EncodeI8(data.chassis_command.w, 20.0f, 5.0f));
     tx_data[5] = static_cast<uint8_t>(EncodeI8(data.pitch, 100.0f, 1.2f));
     PutI16(tx_data, 6, EncodeI16(WrapPi(data.yaw), 10000.0f, 3.14f));
   }
@@ -93,7 +95,7 @@ void GimbalChassisComm::decode(const uint8_t rx_data[8]) {
     data.chassis_mode = DecodeMode(rx_data[1]);
     data.chassis_command.vx = static_cast<int8_t>(rx_data[2]) / 100.0f;
     data.chassis_command.vy = static_cast<int8_t>(rx_data[3]) / 100.0f;
-    data.chassis_command.w = static_cast<int8_t>(rx_data[4]) / 40.0f;
+    data.chassis_command.w = static_cast<int8_t>(rx_data[4]) / 20.0f;
     data.pitch = static_cast<int8_t>(rx_data[5]) / 100.0f;
     data.yaw = static_cast<float>(GetI16(rx_data, 6)) / 10000.0f;
     if (!ValidByte(data.yaw) || !ValidByte(data.pitch)) {
@@ -106,7 +108,7 @@ void GimbalChassisComm::decode(const uint8_t rx_data[8]) {
     data.life = DecodeLife(rx_data[0]);
     data.output_enabled = (rx_data[0] & 0x80) != 0;
     data.mode = DecodeMode(rx_data[1]);
-    data.w = static_cast<int8_t>(rx_data[3]) / 40.0f;
+    data.w = static_cast<int8_t>(rx_data[3]) / 20.0f;
     data.yaw = static_cast<float>(GetI16(rx_data, 4)) / 10000.0f;
   }
 

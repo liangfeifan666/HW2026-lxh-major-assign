@@ -1,34 +1,28 @@
 /**
  *******************************************************************************
- * @file      :chassis.cpp
- * @brief     :
- * @history   :
- *  Version     Date            Author          Note
- *  V0.9.0      yyyy-mm-dd      <author>        1. <note>
- *******************************************************************************
- * @attention :
- *******************************************************************************
- *  Copyright (c) 2024 Hello World Team, Zhejiang University.
- *  All Rights Reserved.
+ * @file      : chassis.cpp
+ * @brief     : 调用共享逆解器；未注册或异常输入时保持全零
  *******************************************************************************
  */
-/* Includes ------------------------------------------------------------------*/
-/* Private macro -------------------------------------------------------------*/
-/* Private constants ---------------------------------------------------------*/
-/* Private types -------------------------------------------------------------*/
-/* Private variables ---------------------------------------------------------*/
-/* External variables --------------------------------------------------------*/
-/* Private function prototypes -----------------------------------------------*/
-/* Exported function definitions ---------------------------------------------*/
-/* Private function definitions ----------------------------------------------*/
+#include "chassis.hpp"
 
-/* ============================================================================
- * 【新人任务】实现 chassis.hpp 中声明的底盘运动学。
- *
- * 你要做：
- *   1. 逆解：输入 (vx, vy, w)，输出每个轮的轮速 / 电流指令（麦轮逆运动学矩阵）。
- *   2. 对解算结果做限幅，避免超速。
- *
- * 约束 / 提示：
- *   - 解算结果会经电机组件的 encode() 下发，注意输入量的类型（电流 / 转矩）。
- * ==========================================================================*/
+#include <cmath>
+
+namespace robot {
+
+void Chassis::update(const ChassisMotion &motion, float gimbal_yaw) {
+  if (solver_ == nullptr || !std::isfinite(motion.vx) ||
+      !std::isfinite(motion.vy) || !std::isfinite(motion.w)) {
+    stop();
+    return;
+  }
+  motion_ = motion;
+  wheel_speeds_ = solver_->solve(motion_, gimbal_yaw);
+}
+
+void Chassis::stop() {
+  motion_ = {};
+  wheel_speeds_.fill(0.0f);
+}
+
+}  // namespace robot
