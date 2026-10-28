@@ -23,6 +23,7 @@ extern "C" {
 /* Exported function prototypes ----------------------------------------------*/
 void MainTaskInit(void);
 void MainTask(void);
+void MainTaskBackground(void);
 #ifdef __cplusplus
 }
 #endif

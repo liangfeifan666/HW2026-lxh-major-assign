@@ -29,6 +29,9 @@ GimbalMotion Gimbal::feedback() const {
 
 void Gimbal::resetTarget() {
   target_ = feedback();
+  previous_yaw_target_ = target_.yaw;
+  previous_yaw_feedback_ = yaw_motor_ ? yaw_motor_->angle() : 0.0f;
+  has_previous_yaw_ = false;
   if (yaw_pid_) yaw_pid_->reset();
   if (pitch_pid_) pitch_pid_->reset();
 }
@@ -49,8 +52,17 @@ void Gimbal::update() {
   }
 
   const GimbalMotion current = feedback();
+  const float continuous_yaw = yaw_motor_->angle();
   const float yaw_error = WrapPi(target_.yaw - current.yaw);
-  const float yaw_output = yaw_pid_->calculate(yaw_error, 0.0f);
+  const float yaw_derivative =
+      has_previous_yaw_
+          ? ((target_.yaw - previous_yaw_target_) -
+             (continuous_yaw - previous_yaw_feedback_)) / 0.001f
+          : 0.0f;
+  previous_yaw_target_ = target_.yaw;
+  previous_yaw_feedback_ = continuous_yaw;
+  has_previous_yaw_ = true;
+  const float yaw_output = yaw_pid_->calculate(yaw_error, 0.0f, yaw_derivative);
   float pitch_output = pitch_pid_->calculate(target_.pitch, current.pitch);
 
   // 已越过软限位时，只允许朝允许区间内部发力。
@@ -63,6 +75,7 @@ void Gimbal::update() {
 }
 
 void Gimbal::stop() {
+  has_previous_yaw_ = false;
   if (yaw_motor_) yaw_motor_->setInput(0.0f);
   if (pitch_motor_) pitch_motor_->setInput(0.0f);
   if (yaw_pid_) yaw_pid_->reset();

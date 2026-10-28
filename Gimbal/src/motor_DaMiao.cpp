@@ -214,7 +214,7 @@ bool DaMiao::decodeFdb(const uint8_t* data)
   angle_ = normAngle(actual_ang - motor_info_.angle_offset);
   vel_raw_ = static_cast<float>(motor_info_.dir) *
              Uint2Float(
-                 static_cast<int16_t>((data[3] << 4) | (data[3] >> 4)),
+                 static_cast<int16_t>((data[3] << 4) | (data[4] >> 4)),
                  getMaxVel(), -getMaxVel(), kVelBits_) /
              motor_info_.redu_rat;
   vel_ = calcVel();
@@ -230,7 +230,8 @@ bool DaMiao::decodeFdb(const uint8_t* data)
   } else if (dm_status_.status_code == StatusCode::kMotorDisabled) {
     dm_status_.is_enabled = false;
   } else {
-    comm_data_.wait_to_handle_cmd = kClearErr;
+    dm_status_.is_enabled = false;
+    if (auto_enable_) comm_data_.wait_to_handle_cmd = kClearErr;
   }
   return true;
 }

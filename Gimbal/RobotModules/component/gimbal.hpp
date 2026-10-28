@@ -38,6 +38,9 @@ class Gimbal {
   hello_world::pid::Pid *yaw_pid_ = nullptr;
   hello_world::pid::Pid *pitch_pid_ = nullptr;
   GimbalMotion target_{};
+  float previous_yaw_target_ = 0.0f;
+  float previous_yaw_feedback_ = 0.0f;
+  bool has_previous_yaw_ = false;
 };
 
 }  // namespace robot

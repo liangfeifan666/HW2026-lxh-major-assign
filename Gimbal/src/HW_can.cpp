@@ -62,15 +62,23 @@ void CanFilter_Init(CAN_HandleTypeDef *hcan)
   }
 }
 
-void CAN_Send_Msg(CAN_HandleTypeDef *hcan, uint8_t *msg, uint32_t id,
-                  uint8_t len)
+HAL_StatusTypeDef CAN_Send_Msg(CAN_HandleTypeDef *hcan, uint8_t *msg,
+                               uint32_t id, uint8_t len)
 {
   CAN_TxHeaderTypeDef tx_header = {0};
   tx_header.StdId = id;
   tx_header.IDE = CAN_ID_STD;
   tx_header.RTR = CAN_RTR_DATA;
   tx_header.DLC = len;
-  HAL_CAN_AddTxMessage(hcan, &tx_header, msg, &p_tx_mailbox);
+  HAL_StatusTypeDef status = HAL_CAN_AddTxMessage(hcan, &tx_header, msg,
+                                                  &p_tx_mailbox);
+  if (status != HAL_OK) {
+    HAL_CAN_AbortTxRequest(hcan, CAN_TX_MAILBOX0 | CAN_TX_MAILBOX1 |
+                                     CAN_TX_MAILBOX2);
+    if (HAL_CAN_GetTxMailboxesFreeLevel(hcan) == 0) return HAL_BUSY;
+    status = HAL_CAN_AddTxMessage(hcan, &tx_header, msg, &p_tx_mailbox);
+  }
+  return status;
 }
 
 /**

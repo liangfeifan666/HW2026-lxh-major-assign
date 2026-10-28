@@ -184,7 +184,7 @@ class BMI088 : public MemMgr
    * @retval       None
    * @note        传入 null_ptr 则不获取对应数据
    */
-  void getData(float acc_data[3], float gyro_data[3], float* temp) const;
+  bool getData(float acc_data[3], float gyro_data[3], float* temp) const;
 
  private:
   /* 功能性方法 */
@@ -342,6 +342,7 @@ class BMI088 : public MemMgr
                                0.0f, 1.0f, 0.0f,
                                0.0f, 0.0f, 1.0f};
   arm_matrix_instance_f32 rot_mat_;
+  mutable bool read_ok_ = false;
 };
 /* Exported variables --------------------------------------------------------*/
 /* Exported function prototypes ----------------------------------------------*/

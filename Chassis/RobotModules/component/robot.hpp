@@ -52,6 +52,8 @@ class Robot {
   std::array<hello_world::OfflineChecker *, kWheelCount> checkers_{};
   LifeState life_state_ = LifeState::Dead;
   GimbalChassisComm::GimbalData gimbal_data_{};
+  float previous_delta_ = 0.0f;
+  bool has_previous_delta_ = false;
   uint16_t resurrection_ticks_ = 0;
 };
 

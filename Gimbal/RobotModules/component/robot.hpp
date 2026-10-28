@@ -56,6 +56,8 @@ class Robot {
   hello_world::OfflineChecker *pitch_checker_ = nullptr;
   LifeState life_state_ = LifeState::Dead;
   ChassisMode chassis_mode_ = ChassisMode::Separate;
+  GimbalChassisComm::ChassisData chassis_data_{};
+  bool peer_was_working_ = false;
   hello_world::remote_control::SwitchState left_switch_ =
       hello_world::remote_control::kSwitchStateDown;
   hello_world::remote_control::SwitchState right_switch_ =
@@ -66,6 +68,7 @@ class Robot {
   float rc_rh_ = 0.0f;
   float rc_wheel_ = 0.0f;
   uint16_t resurrection_ticks_ = 0;
+  uint32_t last_enable_retry_ms_ = 0;
   bool unlock_armed_ = false;
 };
 

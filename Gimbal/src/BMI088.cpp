@@ -271,9 +271,10 @@ BMI088ErrState BMI088::imuInit(bool self_test) const
   return err_state;
 }
 
-void BMI088::getData(
+bool BMI088::getData(
     float acc_data[3], float gyro_data[3], float *temp_ptr) const
 {
+  read_ok_ = true;
   float tmp_data[3];
 
   if (acc_data != nullptr) {
@@ -292,6 +293,7 @@ void BMI088::getData(
     tick::DelayUs(kCommWaitTimeUs);
     *temp_ptr = getTemp();
   }
+  return read_ok_;
 }
 
 BMI088ErrState BMI088::accInit(bool self_test) const
@@ -444,7 +446,7 @@ BMI088ErrState BMI088::gyroSelfTest(void) const
 
 void BMI088::getGyroData(float gyro_data[3]) const
 {
-  uint8_t gyro_raw_data[kGyroRawDataLen];
+  uint8_t gyro_raw_data[kGyroRawDataLen] = {};
   gyroMultiRead(BMI088_GYRO_RATE_X_LSB, kGyroRawDataLen, gyro_raw_data);
 
   for (uint8_t i = 0; i < 3; i++) {
@@ -456,7 +458,7 @@ void BMI088::getGyroData(float gyro_data[3]) const
 
 void BMI088::getAccData(float acc_data[3]) const
 {
-  uint8_t acc_raw_data[kAccRawDataLen];
+  uint8_t acc_raw_data[kAccRawDataLen] = {};
   accMultiRead(BMI088_ACC_ACC_X_LSB, kAccRawDataLen, acc_raw_data);
 
   for (uint8_t i = 0; i < 3; i++) {
@@ -505,8 +507,13 @@ void BMI088::gyroMultiRead(
 {
   gyroCsL();
   start_mem_addr |= kReadSign;
-  HAL_SPI_Transmit(hspi_, &start_mem_addr, 1, kSpiTimeout);
-  HAL_SPI_TransmitReceive(hspi_, kPaddingData, rx_data, len, kSpiTimeout);
+  if (HAL_SPI_Transmit(hspi_, &start_mem_addr, 1, kSpiTimeout) != HAL_OK) {
+    read_ok_ = false;
+  }
+  if (HAL_SPI_TransmitReceive(hspi_, kPaddingData, rx_data, len,
+                              kSpiTimeout) != HAL_OK) {
+    read_ok_ = false;
+  }
   gyroCsH();
 }
 
@@ -535,8 +542,14 @@ void BMI088::accMultiRead(
   uint8_t tx_data[2] = {start_mem_addr |= kReadSign, kPaddingValue};
 
   accCsL();
-  HAL_SPI_TransmitReceive(hspi_, tx_data, rx_data, 2, kSpiTimeout);
-  HAL_SPI_TransmitReceive(hspi_, kPaddingData, rx_data, len, kSpiTimeout);
+  if (HAL_SPI_TransmitReceive(hspi_, tx_data, rx_data, 2,
+                              kSpiTimeout) != HAL_OK) {
+    read_ok_ = false;
+  }
+  if (HAL_SPI_TransmitReceive(hspi_, kPaddingData, rx_data, len,
+                              kSpiTimeout) != HAL_OK) {
+    read_ok_ = false;
+  }
   accCsH();
 }
 /* Private function definitions ----------------------------------------------*/

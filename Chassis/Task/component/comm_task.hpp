@@ -17,12 +17,14 @@
 #define CHASSIS_TASK_COMM_TASK_HPP_
 
 /* Includes ------------------------------------------------------------------*/
+#include <stdbool.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
 /* Exported function prototypes ----------------------------------------------*/
 void CommTaskInit(void);
 void CommTask(void);
+bool CommMotorCanHealthy(void);
 #ifdef __cplusplus
 }
 #endif

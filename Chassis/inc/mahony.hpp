@@ -103,6 +103,8 @@ class Mahony : public Ahrs
    */
   void init(const float quat_init[4], float samp_freq, float kp, float ki);
 
+  void setSampleFrequency(float samp_freq) { samp_freq_ = samp_freq; }
+
  private:
   float samp_freq_ = 1000.0f;
   float dbl_kp_ = 0.5f;  ///* 2 * kp

@@ -8,6 +8,8 @@
 
 #include <cmath>
 
+#include "comm_task.hpp"
+
 namespace robot {
 
 void Robot::registerWheel(int idx, hello_world::motor::Motor *motor,
@@ -20,7 +22,8 @@ void Robot::registerWheel(int idx, hello_world::motor::Motor *motor,
 }
 
 bool Robot::hardwareReady() const {
-  if (!chassis_ || !imu_ || !comm_ || !follow_pid_ || !imu_->isReady()) {
+  if (!chassis_ || !imu_ || !comm_ || !follow_pid_ || !imu_->isReady() ||
+      !CommMotorCanHealthy()) {
     return false;
   }
   for (std::size_t i = 0; i < kWheelCount; ++i) {
@@ -69,7 +72,16 @@ void Robot::update() {
     gimbal_data_ = comm_->gimbal_data();
     __set_PRIMASK(primask);
   }
-  if (imu_) imu_->update();
+  // 对端急停/离线是最高优先级，先于一切非必要计算。
+  if (!comm_ || comm_->isOffline() ||
+      gimbal_data_.life != LifeState::Working ||
+      !gimbal_data_.remote_working) {
+    life_state_ = LifeState::Dead;
+    resurrection_ticks_ = 0;
+    stopAll();
+    updateComm(false, 0.0f);
+    return;
+  }
   updateState();
 
   if (!outputAllowed()) {
@@ -95,9 +107,16 @@ void Robot::runWorking() {
   command.vy = Clamp(command.vy, -1.2f, 1.2f);
   const float delta = WrapPi(gimbal.yaw);
   if (gimbal.chassis_mode == ChassisMode::Follow) {
-    command.w = follow_pid_->calculate(delta, 0.0f);
+    // 误差跨 ±π 时用最短弧变化量，避免把支路跳变放大成微分脉冲。
+    const float delta_derivative = has_previous_delta_
+                                       ? WrapPi(delta - previous_delta_) / 0.001f
+                                       : 0.0f;
+    previous_delta_ = delta;
+    has_previous_delta_ = true;
+    command.w = follow_pid_->calculate(delta, 0.0f, delta_derivative);
   } else {
     follow_pid_->reset();
+    has_previous_delta_ = false;
     command.w = Clamp(command.w, -5.0f, 5.0f);
   }
   command.w = Clamp(command.w, -5.0f, 5.0f);
@@ -123,6 +142,7 @@ void Robot::runWorking() {
 void Robot::stopAll() {
   if (chassis_) chassis_->stop();
   if (follow_pid_) follow_pid_->reset();
+  has_previous_delta_ = false;
   for (std::size_t i = 0; i < kWheelCount; ++i) {
     if (motors_[i]) motors_[i]->setInput(0.0f);
     if (pids_[i]) pids_[i]->reset();

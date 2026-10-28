@@ -45,6 +45,8 @@
 #define HW_COMPONENTS_DEVICES_MOTOR_MOTOR_DAMIAO_HPP_
 
 /* Includes ------------------------------------------------------------------*/
+#include <cmath>
+
 #include "motor_base.hpp"
 #include "system.hpp"
 
@@ -378,9 +380,17 @@ class DaMiao : public Motor
   static inline uint16_t Float2Uint(
       float x_float, float x_max, float x_min, uint8_t bits)
   {
-    float span = x_max - x_min;
-    float offset = x_min;
-    return (uint16_t)((x_float - offset) * ((float)((1 << bits) - 1)) / span);
+    if (!std::isfinite(x_float)) {
+      return x_min == 0.0f ? 0U : (1U << (bits - 1));
+    }
+    if (x_float > x_max) x_float = x_max;
+    if (x_float < x_min) x_float = x_min;
+    const float span = x_max - x_min;
+    const float offset = x_min;
+    const float scaled = (x_float - offset) *
+                         static_cast<float>((1U << bits) - 1U) / span;
+    // 对称量程的零值必须落到 0x800，而不是截断成 0x7FF。
+    return static_cast<uint16_t>(scaled + 0.5f);
   }
 
   /**

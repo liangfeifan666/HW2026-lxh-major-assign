@@ -31,6 +31,6 @@ class OfflineChecker;
 /* 获取遥控器解码对象（DT7）单例。 */
 hello_world::remote_control::DT7 *GetRemoteControl();
 hello_world::OfflineChecker *GetRemoteControlOfflineChecker();
-void DecodeRemoteControlFrame(const uint8_t data[18]);
+bool DecodeRemoteControlFrame(const uint8_t data[18]);
 
 #endif /* GIMBAL_INSTANCE_INS_COMM_HPP_ */

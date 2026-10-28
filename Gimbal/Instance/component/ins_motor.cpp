@@ -27,13 +27,13 @@ hello_world::motor::OptionalParams MakeOptions(hello_world::motor::Dir dir,
 
 hello_world::motor::Motor *GetMotorYaw() {
   static const auto opt = MakeOptions(hello_world::motor::kDirFwd, -1.36920f);
-  static hello_world::motor::DM_J4310 motor(kYawId, opt, true, false);
+  static hello_world::motor::DM_J4310 motor(kYawId, opt, false, false);
   return &motor;
 }
 
 hello_world::motor::Motor *GetMotorPitch() {
   static const auto opt = MakeOptions(hello_world::motor::kDirRev, 0.02480f);
-  static hello_world::motor::DM_J4310 motor(kPitchId, opt, true, false);
+  static hello_world::motor::DM_J4310 motor(kPitchId, opt, false, false);
   return &motor;
 }
 

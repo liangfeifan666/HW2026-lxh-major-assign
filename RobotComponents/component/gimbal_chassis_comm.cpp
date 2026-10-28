@@ -37,8 +37,22 @@ int16_t GetI16(const uint8_t *data, int index) {
   return static_cast<int16_t>(raw);
 }
 
-bool ValidByte(float value) {
-  return std::isfinite(value);
+bool ValidCommon(const uint8_t data[8]) {
+  const uint8_t life = data[0] & 0x0F;
+  const uint8_t mode = data[1] & 0x0F;
+  const bool enabled = (data[0] & 0x80) != 0;
+  return (data[0] & 0x70) == 0 && life <= 2 && mode <= 2 &&
+         (!enabled || life == 2);  // 放行位只能与 Working 同时出现。
+}
+
+bool ValidI8(const uint8_t data[8], int index, int limit) {
+  const int value = static_cast<int8_t>(data[index]);
+  return value >= -limit && value <= limit;
+}
+
+bool ValidI16(const uint8_t data[8], int index, int limit) {
+  const int value = GetI16(data, index);
+  return value >= -limit && value <= limit;
 }
 
 robot::LifeState DecodeLife(uint8_t value) {
@@ -85,10 +99,13 @@ void GimbalChassisComm::encode(uint8_t tx_data[8]) {
 }
 
 void GimbalChassisComm::decode(const uint8_t rx_data[8]) {
-  // 协议版本不符的帧直接丢弃，不刷新在线时间。
-  if ((rx_data[1] & 0xF0) != kProtocolVersion) return;
+  // 版本、枚举、保留位或定点范围不符的帧直接丢弃，不刷新在线时间。
+  if ((rx_data[1] & 0xF0) != kProtocolVersion || !ValidCommon(rx_data)) return;
 
   if (code_part_ == CodePart::Chassis) {
+    if (!ValidI8(rx_data, 2, 120) || !ValidI8(rx_data, 3, 120) ||
+        !ValidI8(rx_data, 4, 100) || !ValidI8(rx_data, 5, 120) ||
+        !ValidI16(rx_data, 6, 31400)) return;
     auto &data = gimbal_data_;
     data.life = DecodeLife(rx_data[0]);
     data.remote_working = (rx_data[0] & 0x80) != 0;
@@ -98,12 +115,9 @@ void GimbalChassisComm::decode(const uint8_t rx_data[8]) {
     data.chassis_command.w = static_cast<int8_t>(rx_data[4]) / 20.0f;
     data.pitch = static_cast<int8_t>(rx_data[5]) / 100.0f;
     data.yaw = static_cast<float>(GetI16(rx_data, 6)) / 10000.0f;
-    if (!ValidByte(data.yaw) || !ValidByte(data.pitch)) {
-      data.remote_working = false;
-      data.life = LifeState::Dead;
-      return;
-    }
   } else {
+    if (rx_data[2] != 0 || rx_data[6] != 0 || rx_data[7] != 0 ||
+        !ValidI8(rx_data, 3, 100) || !ValidI16(rx_data, 4, 31400)) return;
     auto &data = chassis_data_;
     data.life = DecodeLife(rx_data[0]);
     data.output_enabled = (rx_data[0] & 0x80) != 0;
